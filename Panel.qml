@@ -313,6 +313,7 @@ Panel {
   readonly property string heroMeta: {
     if (!vpn.installed) return vpn.installing ? "Installing…" : "Not installed"
     if (vpn.busy && vpn.pendingLabel !== "") return vpn.pendingLabel
+    if (vpn.signingIn) return "Signing in…"
     if (vpn.connected) {
       var server = Model.routeLabel(vpn.displayServer)
       if (server === "") return "Protected"
@@ -1245,6 +1246,7 @@ Panel {
               id: usernameField
               width: parent.width
               foreground: root.foreground
+              readOnly: vpn.signingIn
               placeholderText: "Proton username or email"
               Keys.onEscapePressed: function(event) {
                 keyCatcher.forceActiveFocus()
@@ -1256,17 +1258,18 @@ Panel {
               }
             }
 
-            // The password shows as typed by default, so a rejected one can be
-            // checked letter by letter; the eye hides it.
+            // Hidden by default; the eye shows it, so a rejected one can be
+            // checked letter by letter.
             Item {
               width: parent.width
               height: passwordField.implicitHeight
 
               TextField {
                 id: passwordField
-                property bool revealed: true
+                property bool revealed: false
                 anchors.fill: parent
                 foreground: root.foreground
+                readOnly: vpn.signingIn
                 password: !revealed
                 placeholderText: "Password"
                 rightPadding: horizontalPadding + revealButton.width
@@ -1291,7 +1294,7 @@ Panel {
                 anchors.verticalCenter: parent.verticalCenter
                 width: Style.space(28)
                 horizontalAlignment: Text.AlignHCenter
-                text: passwordField.revealed ? "󰈈" : "󰈉"
+                text: passwordField.revealed ? "󰈉" : "󰈈"
                 color: revealMouse.containsMouse ? root.foreground : root.dim
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.body
@@ -1310,6 +1313,7 @@ Panel {
               id: codeField
               width: parent.width
               foreground: root.foreground
+              readOnly: vpn.signingIn
               placeholderText: "2FA code (if your account uses one)"
               inputMethodHints: Qt.ImhDigitsOnly
               Keys.onEscapePressed: function(event) {
@@ -1326,10 +1330,22 @@ Panel {
               width: parent.width
               hasCursor: root.cursorActive && root.focusSection === "signin"
               icon: "󰌆"
+              busy: vpn.signingIn
               title: vpn.signingIn ? "Signing in…" : "Sign in with Proton"
-              subtitle: "Your password goes straight to Proton's own CLI"
               onEntered: root.setCursorFromHover("signin", 0)
               onClicked: root.submitSignIn()
+            }
+
+            Text {
+              width: parent.width
+              text: vpn.signingIn
+                ? "Checking your details with Proton. This can take a few seconds."
+                : "Your password goes straight to Proton's own CLI."
+              textFormat: Text.PlainText
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              wrapMode: Text.WordWrap
             }
           }
 
@@ -2186,6 +2202,8 @@ Panel {
     property string title: ""
     property string subtitle: ""
     property string trailing: ""
+    // Swaps the icon for a spinner while what it started is running.
+    property bool busy: false
     // A pencil on the right, and a right-click anywhere, open the editor.
     property bool editable: false
     signal entered()
@@ -2220,11 +2238,20 @@ Panel {
 
       Text {
         visible: actionRow.icon !== ""
-        text: actionRow.icon
+        text: actionRow.busy ? "\udb81\udf72" : actionRow.icon
         color: actionRow.iconColor
         font.family: root.fontFamily
         font.pixelSize: Style.font.heading
         Layout.alignment: Qt.AlignVCenter
+
+        RotationAnimator on rotation {
+          running: actionRow.busy
+          from: 0
+          to: 360
+          duration: 900
+          loops: Animation.Infinite
+          onRunningChanged: if (!running) parent.rotation = 0
+        }
       }
 
       ColumnLayout {
