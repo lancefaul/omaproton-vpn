@@ -719,12 +719,13 @@ Panel {
     showConnection()
   }
 
-  // Empty field: put the cursor in it rather than opening a terminal that
-  // would only ask the same question.
+  // An empty field gets the cursor rather than an error.
   function submitSignIn() {
+    if (vpn.signingIn) return
     var u = String(usernameField.text || "").trim()
     if (u === "") { usernameField.forceActiveFocus(); return }
-    if (vpn.signIn(u)) keyCatcher.forceActiveFocus()
+    if (String(passwordField.text || "") === "") { passwordField.forceActiveFocus(); return }
+    if (vpn.signInWith(u, passwordField.text, codeField.text)) keyCatcher.forceActiveFocus()
   }
 
   function maxScroll() {
@@ -1250,6 +1251,72 @@ Panel {
                 event.accepted = true
               }
               Keys.onReturnPressed: function(event) {
+                passwordField.forceActiveFocus()
+                event.accepted = true
+              }
+            }
+
+            // The password shows as typed by default, so a rejected one can be
+            // checked letter by letter; the eye hides it.
+            Item {
+              width: parent.width
+              height: passwordField.implicitHeight
+
+              TextField {
+                id: passwordField
+                property bool revealed: true
+                anchors.fill: parent
+                foreground: root.foreground
+                password: !revealed
+                placeholderText: "Password"
+                rightPadding: horizontalPadding + revealButton.width
+                inputMethodHints: Qt.ImhSensitiveData | Qt.ImhNoPredictiveText | Qt.ImhNoAutoUppercase
+                Keys.onEscapePressed: function(event) {
+                  keyCatcher.forceActiveFocus()
+                  event.accepted = true
+                }
+                Keys.onReturnPressed: function(event) {
+                  root.submitSignIn()
+                  event.accepted = true
+                }
+                Connections {
+                  target: vpn
+                  function onSignInCountChanged() { passwordField.text = ""; codeField.text = "" }
+                }
+              }
+
+              Text {
+                id: revealButton
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                width: Style.space(28)
+                horizontalAlignment: Text.AlignHCenter
+                text: passwordField.revealed ? "󰈈" : "󰈉"
+                color: revealMouse.containsMouse ? root.foreground : root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.body
+
+                MouseArea {
+                  id: revealMouse
+                  anchors.fill: parent
+                  hoverEnabled: true
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: passwordField.revealed = !passwordField.revealed
+                }
+              }
+            }
+
+            TextField {
+              id: codeField
+              width: parent.width
+              foreground: root.foreground
+              placeholderText: "2FA code (if your account uses one)"
+              inputMethodHints: Qt.ImhDigitsOnly
+              Keys.onEscapePressed: function(event) {
+                keyCatcher.forceActiveFocus()
+                event.accepted = true
+              }
+              Keys.onReturnPressed: function(event) {
                 root.submitSignIn()
                 event.accepted = true
               }
@@ -1259,8 +1326,8 @@ Panel {
               width: parent.width
               hasCursor: root.cursorActive && root.focusSection === "signin"
               icon: "󰌆"
-              title: "Sign in with Proton"
-              subtitle: "Opens a terminal for your password and 2FA code"
+              title: vpn.signingIn ? "Signing in…" : "Sign in with Proton"
+              subtitle: "Your password goes straight to Proton's own CLI"
               onEntered: root.setCursorFromHover("signin", 0)
               onClicked: root.submitSignIn()
             }

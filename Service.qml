@@ -205,6 +205,11 @@ Item {
 
   property string actionStatus: ""
   property string lastError: ""
+  // The panel's own sign-in is running (signInWith).
+  property bool signingIn: false
+  // Bumped when it succeeds, so the panel can clear its password field.
+  property int signInCount: 0
+  property bool _signInHadCode: false
   property string pendingLabel: ""
 
   // -1 = follow reality; 0/1 = a requested state still catching up.
@@ -908,6 +913,33 @@ Item {
     actionProcess.running = true
   }
 
+  // Signs in from the panel's own fields. With no terminal attached the CLI
+  // reads the password (and then the 2FA code) from stdin, so they're piped
+  // in from the environment by the shell's printf builtin: never in argv,
+  // where any process could read them. --totp asks for an authenticator code
+  // even on accounts with a security key, and is ignored without 2FA.
+  function signInWith(username, password, code) {
+    var u = String(username || "").trim()
+    if (!Model.validUsername(u)) {
+      lastError = "Usernames can only contain letters, numbers and . _ + @ -"
+      return false
+    }
+    if (String(password || "") === "") { lastError = "Enter your password"; return false }
+    if (signInProcess.running) return false
+    lastError = ""
+    signingIn = true
+    _signInHadCode = String(code || "").trim() !== ""
+    signInProcess.environment = ({
+      OMAPROTON_PW: String(password),
+      OMAPROTON_2FA: String(code || "").trim()
+    })
+    signInProcess.command = ["sh", "-c",
+      "printf '%s\\n%s\\n' \"$OMAPROTON_PW\" \"$OMAPROTON_2FA\" | setsid -w protonvpn signin \"$1\" --totp",
+      "sh", u]
+    signInProcess.running = true
+    return true
+  }
+
   // Sign-in is interactive (password, then a TOTP token), so it has to happen
   // in a real terminal, the CLI only accepts them from a tty. The username
   // can be typed in the panel; with none given the terminal asks for it.
@@ -1509,6 +1541,40 @@ Item {
         root.lastError = ""
       } else {
         root.lastError = Model.elide(String(statusStderr.text || "") || "protonvpn status failed")
+      }
+    }
+  }
+
+  Process {
+    id: signInProcess
+    running: false
+    command: []
+    stdout: StdioCollector { id: signInStdout; waitForEnd: true }
+    stderr: StdioCollector { id: signInStderr; waitForEnd: true }
+    // The environment holds the password only until the CLI has it.
+    onStarted: environment = ({})
+    onExited: function(exitCode) {
+      root.signingIn = false
+      var out = String(signInStdout.text || "") + "\n" + String(signInStderr.text || "")
+      if (exitCode === 0) {
+        root.lastError = ""
+        root.signInCount += 1
+        root.refreshAccount()
+        signInWatch.restart()
+        return
+      }
+      if (/Invalid two-factor/i.test(out))
+        root.lastError = "That 2FA code wasn't accepted. Codes change every 30 seconds: try the current one."
+      else if (/2FA Token|Aborted/i.test(out))
+        root.lastError = root._signInHadCode
+          ? "That 2FA code wasn't accepted. Codes change every 30 seconds: try the current one."
+          : "This account uses two-factor authentication: enter the code from your authenticator app."
+      else if (/Already signed in/i.test(out)) {
+        root.lastError = ""
+        root.refreshAccount()
+      } else {
+        var m = out.match(/Error: (.*)/)
+        root.lastError = Model.elide(m ? m[1] : (out.trim() || "Sign-in failed"))
       }
     }
   }
