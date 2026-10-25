@@ -210,6 +210,10 @@ Item {
   // Bumped when it succeeds, so the panel can clear its password field.
   property int signInCount: 0
   property bool _signInHadCode: false
+  // True between a CLI exit 0 and an `info` probe confirming a persisted
+  // session, so a sign-in that exits clean but saves nothing is caught instead
+  // of silently clearing the panel's fields.
+  property bool _confirmingSignIn: false
   property string pendingLabel: ""
 
   // -1 = follow reality; 0/1 = a requested state still catching up.
@@ -916,8 +920,11 @@ Item {
   // Signs in from the panel's own fields. With no terminal attached the CLI
   // reads the password (and then the 2FA code) from stdin, so they're piped
   // in from the environment by the shell's printf builtin: never in argv,
-  // where any process could read them. --totp asks for an authenticator code
-  // even on accounts with a security key, and is ignored without 2FA.
+  // where any process could read them. --totp tells the CLI we're supplying an
+  // authenticator/recovery code instead of a security key, so it's passed only
+  // when the user actually entered a code: forcing it on a no-2FA or
+  // security-key account sends sign-in down the wrong path. A security-key
+  // account still needs the interactive terminal path (signIn()).
   function signInWith(username, password, code) {
     var u = String(username || "").trim()
     if (!Model.validUsername(u)) {
@@ -933,8 +940,9 @@ Item {
       OMAPROTON_PW: String(password),
       OMAPROTON_2FA: String(code || "").trim()
     })
+    var totpFlag = _signInHadCode ? " --totp" : ""
     signInProcess.command = ["sh", "-c",
-      "printf '%s\\n%s\\n' \"$OMAPROTON_PW\" \"$OMAPROTON_2FA\" | setsid -w protonvpn signin \"$1\" --totp",
+      "printf '%s\\n%s\\n' \"$OMAPROTON_PW\" \"$OMAPROTON_2FA\" | setsid -w protonvpn signin \"$1\"" + totpFlag,
       "sh", u]
     signInProcess.running = true
     return true
@@ -1416,7 +1424,20 @@ Item {
     onTriggered: {
       ticks += 1
       root.refreshAccount()
-      if (root.signedIn || ticks > 40) stop()
+      // A pending sign-in that never shows up as signed-in is a failure (e.g.
+      // the CLI exited 0 but saved no session): give it a few probes, then
+      // stop waiting and surface it instead of clearing the fields.
+      if (root._confirmingSignIn && !root.signedIn && ticks >= 3) {
+        root._confirmingSignIn = false
+        root.signingIn = false
+        root.lastError = "Signed in, but no VPN session was saved. Please try again."
+        stop()
+        return
+      }
+      if (root.signedIn || ticks > 40) {
+        root._confirmingSignIn = false
+        stop()
+      }
     }
   }
 
@@ -1554,15 +1575,20 @@ Item {
     // The environment holds the password only until the CLI has it.
     onStarted: environment = ({})
     onExited: function(exitCode) {
-      root.signingIn = false
       var out = String(signInStdout.text || "") + "\n" + String(signInStderr.text || "")
       if (exitCode === 0) {
+        // Exit 0 means the CLI authenticated, but not that a session was
+        // persisted (an upgrade can leave the account index empty, so the
+        // next process still reads signed-out). Hold "Signing in…" and let an
+        // info probe confirm before clearing the fields; signInWatch is the
+        // backstop that declares failure if confirmation never arrives.
         root.lastError = ""
-        root.signInCount += 1
+        root._confirmingSignIn = true
         root.refreshAccount()
         signInWatch.restart()
         return
       }
+      root.signingIn = false
       if (/Invalid two-factor/i.test(out))
         root.lastError = "That 2FA code wasn't accepted. Codes change every 30 seconds: try the current one."
       else if (/2FA Token|Aborted/i.test(out))
@@ -1612,6 +1638,16 @@ Item {
       root.signedIn = info.signedIn
       root.account = info.account
       root.plan = info.plan
+      // A pending sign-in is only really done once a fresh probe sees the
+      // account. Confirm here (clearing the fields via signInCount); if it's
+      // still signed-out, leave _confirmingSignIn set so signInWatch keeps
+      // polling and ultimately reports failure.
+      if (root._confirmingSignIn && info.signedIn) {
+        root._confirmingSignIn = false
+        root.signingIn = false
+        root.lastError = ""
+        root.signInCount += 1
+      }
       if (info.signedIn && !was) {
         root.loadCountries(true)
         root.loadConfig()
