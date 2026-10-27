@@ -30,6 +30,16 @@ line of a VPN widget), so this fork is where changes live.
 - Plugin-wide lessons (reloading, settings, testing a shell plugin) are in the user-level
   `omarchy-plugin-dev` skill.
 
+## Review
+
+Before merging or shipping: the user-level `pre-merge-review` skill — `/code-review` on the
+diff in a fresh context, and `/security-review` on any change to sign-in or to commands run through `protonvpn`, findings as Important / Nit / Pre-existing with file and line, every
+finding answered, at most three rounds.
+
+**Always needs the owner's eyes:** sign-in and password handling, connect, disconnect and the Kill Switch, split tunneling, anything run through the `protonvpn` CLI.
+
+**How to undo:** `git revert` on `main` and `omarchy-restart-shell`.
+
 ## Skills learn
 
 A lesson lands here in the same commit as the fix: a sign-in or CLI behaviour, a Proton library
