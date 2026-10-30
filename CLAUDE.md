@@ -30,6 +30,25 @@ line of a VPN widget), so this fork is where changes live.
 - Plugin-wide lessons (reloading, settings, testing a shell plugin) are in the user-level
   `omarchy-plugin-dev` skill.
 
+## Colour and contrast
+
+- **The panel is one ink**: everything is the theme foreground, dimmed with `Qt.darker` or an
+  opacity. `Qt.darker` gets *more* readable on a light theme (dark text, darker still) and less on a
+  dark one (Tokyo Night's `dim` was 3.1:1); an opacity fails on light themes (Catppuccin Latte's info
+  labels, fg at 0.6, were 2.8:1). So never add a new dimmed colour or opacity on text or an icon:
+  route it through `Contrast.js` the way `Panel.qml`'s Contrast block does (composite with
+  `Contrast.over` onto the surface under it, then `ensureContrastOn` to 4.5:1 for text, 3:1 for icons,
+  map dots and state marks). Decorative fills (land, chart area, baselines) stay as they are.
+- **The surfaces**: the panel is `Color.popups.background`; a row under the cursor adds the hover
+  fill, the nudge and the profile editor add the normal control fill (`textSurfaces`). The map's dots
+  sit on land, the foreground at 0.10 over the panel. The bar icon sits on `bar.background`.
+- **Errors use `root.danger`, never `root.urgent`**: the theme's urgent is green on Hackerman,
+  magenta on Lupine and grey on White; `danger` falls back to a real red and holds 4.5:1.
+- **Check with** a throwaway script computing each colour on the light themes (catppuccin-latte,
+  flexoki-light, lupine, rose-pine, white) and on hackerman and tokyo-night; drive the real
+  `Contrast.js` through `node` (strip the `.pragma library` line) so the numbers are the code's. The
+  shell's own controls (cursor ring, toggles, dropdowns) are the shell's and aren't fixed here.
+
 ## Review
 
 Before merging or shipping: the user-level `pre-merge-review` skill — `/code-review` on the

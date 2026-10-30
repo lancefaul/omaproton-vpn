@@ -7,8 +7,8 @@ import qs.Commons
 // reason the Tailscale widget redraws its logo rather than scaling a tiny SVG.
 //
 // Source path: https://cdn.simpleicons.org/protonvpn (24x24 viewBox, CC0).
-// Connected/disconnected is carried by the caller's color and opacity, which
-// is how the first-party widgets (dropbox, tailscale) signal state too.
+// Connected/disconnected is carried by the caller's color: dimmed when
+// disconnected, and held to 3:1 against what it sits on (Panel.qml).
 Item {
   id: root
 

@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Shapes
 import qs.Commons
 import "World.js" as World
+import "Contrast.js" as Contrast
 
 // Where in the world you are, and where else you could be.
 //
@@ -25,7 +26,15 @@ Item {
   property bool connected: false
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
-  readonly property color dim: Qt.darker(foreground, 1.55)
+  // The map is drawn on this; the panel passes its own surface.
+  property color background: Color.popups.background
+  // Land is the foreground at 0.10 over the background (the Shape below).
+  readonly property string landSurface: Contrast.over(foreground, 0.10, String(background))
+  // A city dot is a control, so it holds 3:1 on land and on sea. It was the
+  // dimmed foreground at 0.55 opacity: that colour, composited, lifted only
+  // where it fell short (light themes, and a touch on dark ones), drawn opaque.
+  readonly property color dotInk: Contrast.ensureContrastOn(
+    Contrast.over(Qt.darker(foreground, 1.55), 0.55, landSurface), [landSurface, String(background)], 3.0)
   // {code, city, lat, lon} for the Secure Core entry country, or null.
   readonly property var entry: connected && current && current.entry && current.entry.lat !== undefined && current.entry.lat !== null ? current.entry : null
 
@@ -158,8 +167,7 @@ Item {
         width: dot.current ? 7 : (dot.hot ? 5 : 2.5)
         height: width
         radius: width / 2
-        color: dot.current || dot.hot ? root.foreground : root.dim
-        opacity: dot.current ? 1.0 : (dot.hot ? 1.0 : 0.55)
+        color: dot.current || dot.hot ? root.foreground : root.dotInk
         Behavior on width { NumberAnimation { duration: 90 } }
       }
 

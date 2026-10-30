@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Shapes
 import qs.Commons
+import "Contrast.js" as Contrast
 
 // Tunnel throughput: two rates, a 60-second sparkline, session totals.
 //
@@ -23,7 +24,13 @@ Item {
 
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
-  readonly property color dim: Qt.darker(foreground, 1.55)
+  // What the chart is drawn on, for the contrast of the caption and the
+  // upload line (Contrast.js): the panel passes its own surface.
+  property color background: Color.popups.background
+  readonly property string surface: String(background)
+  readonly property color dim: Contrast.ensureContrastOn(Qt.darker(foreground, 1.55), [surface], 4.5)
+  // The upload line was the foreground at 0.7: that colour, held to 3:1.
+  readonly property color uploadInk: Contrast.ensureContrastOn(Contrast.over(foreground, 0.7, surface), [surface], 3.0)
 
   readonly property int samples: 60
   readonly property real chartHeight: Style.space(36)
@@ -183,7 +190,7 @@ Item {
         // Upload: dashed 2px line, foreground
         ShapePath {
           fillColor: "transparent"
-          strokeColor: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.7)
+          strokeColor: root.uploadInk
           strokeWidth: 2
           strokeStyle: ShapePath.DashLine
           dashPattern: [2.5, 2]
