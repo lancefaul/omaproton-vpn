@@ -8,7 +8,7 @@ import qs.Commons
 //
 // Source path: https://cdn.simpleicons.org/protonvpn (24x24 viewBox, CC0).
 // Connected/disconnected is carried by the caller's color: dimmed when
-// disconnected, and held to 3:1 against what it sits on (Panel.qml).
+// disconnected, held to 3:1 where Panel.qml can measure the surface under it.
 Item {
   id: root
 

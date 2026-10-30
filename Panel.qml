@@ -132,14 +132,16 @@ Panel {
   readonly property color iconColor: vpn.connected
     ? foreground
     : Contrast.ensureContrastOn(Contrast.over(Qt.darker(foreground, 1.55), 0.5, surface), [surface], 3.0)
-  // On the bar's own background, as with the panel. A transparent bar shows
-  // the wallpaper, which can't be measured, and the shell has already picked
-  // barForeground to stand out from it: there the old dim-at-0.6 stays.
+  // On the bar's own background, as with the panel. A transparent or
+  // see-through bar shows the wallpaper, which can't be measured, and the
+  // shell has already picked barForeground to stand out from it: there the
+  // old dim-at-0.6 stays.
   readonly property string barSurface: String(bar ? bar.background : Color.bar.background)
   readonly property color barIconColor: {
     if (vpn.connected) return barForeground
     var d = Qt.darker(barForeground, 1.55)
-    if (bar && bar.transparent) return Qt.rgba(d.r, d.g, d.b, 0.6)
+    var b = bar ? bar.background : Color.bar.background
+    if ((bar && bar.transparent) || b.a < 1) return Qt.rgba(d.r, d.g, d.b, 0.6)
     return Contrast.ensureContrastOn(Contrast.over(d, 0.6, barSurface), [barSurface], 3.0)
   }
 
@@ -1762,7 +1764,7 @@ Panel {
                 visible: root.splitDetailVisible
                 width: parent.width
                 text: "Restart each chosen app after connecting, or it keeps using the tunnel it started on."
-                color: root.textInk(Qt.darker(root.foreground, 1.5))
+                color: root.dim
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
                 wrapMode: Text.WordWrap
