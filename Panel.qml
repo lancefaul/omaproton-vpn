@@ -6,6 +6,7 @@ import Quickshell.Io
 import qs.Commons
 import qs.Ui
 import "Model.js" as Model
+import "Contrast.js" as Contrast
 
 Panel {
   id: root
@@ -92,11 +93,57 @@ Panel {
 
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property color urgent: bar ? bar.urgent : Color.urgent
-  readonly property color dim: Qt.darker(foreground, 1.55)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
 
-  readonly property color iconColor: vpn.connected ? foreground : dim
-  readonly property color barIconColor: vpn.connected ? barForeground : Qt.darker(barForeground, 1.55)
+  // ── Contrast ────────────────────────────────────────────────────────────
+  // One ink, dimmed by Qt.darker or an opacity, reads on a dark theme and
+  // fails on a light one (Catppuccin Latte's fg at 0.6 is 2.8:1). Every
+  // dimmed colour is computed as it lands, over the surface under it, and
+  // pushed only as far as WCAG asks: 4.5:1 for text, 3:1 for icons and state
+  // marks. Colours that already pass come back unchanged (Contrast.js).
+  readonly property string surface: String(Color.popups.background)
+  // A row under the cursor, and a boxed section (the nudge, the editor).
+  readonly property string hoverSurface: {
+    var f = Style.hoverFillFor(foreground, Color.accent)
+    return Contrast.over(f, f.a, surface)
+  }
+  readonly property string boxSurface: {
+    var f = Style.controlFill(false, false, foreground, Color.accent)
+    return Contrast.over(f, f.a, surface)
+  }
+  readonly property var textSurfaces: [surface, hoverSurface, boxSurface]
+  function textInk(c) { return Contrast.ensureContrastOn(c, textSurfaces, 4.5) }
+  function markInk(c) { return Contrast.ensureContrastOn(c, textSurfaces, 3.0) }
+
+  readonly property color dim: textInk(Qt.darker(foreground, 1.55))
+  // Info labels were the foreground at 0.6 opacity, copy values at 0.85.
+  readonly property color labelInk: textInk(Contrast.over(foreground, 0.6, surface))
+  readonly property color copyInk: textInk(Contrast.over(foreground, 0.85, surface))
+  // Errors and overloaded servers. A real red when the theme's urgent isn't
+  // one: Hackerman's is a green, which reads as good news.
+  readonly property color danger: {
+    var c = urgent
+    var reddish = c.hsvSaturation > 0.3 && (c.hsvHue < 0.06 || c.hsvHue > 0.92)
+    return textInk(reddish ? c : "#ff6b6b")
+  }
+
+  // Disconnected was the dim ink at half opacity: now that colour, composited
+  // and lifted to 3:1, drawn opaque.
+  readonly property color iconColor: vpn.connected
+    ? foreground
+    : Contrast.ensureContrastOn(Contrast.over(Qt.darker(foreground, 1.55), 0.5, surface), [surface], 3.0)
+  // On the bar's own background, as with the panel. A transparent or
+  // see-through bar shows the wallpaper, which can't be measured, and the
+  // shell has already picked barForeground to stand out from it: there the
+  // old dim-at-0.6 stays.
+  readonly property string barSurface: String(bar ? bar.background : Color.bar.background)
+  readonly property color barIconColor: {
+    if (vpn.connected) return barForeground
+    var d = Qt.darker(barForeground, 1.55)
+    var b = bar ? bar.background : Color.bar.background
+    if ((bar && bar.transparent) || b.a < 1) return Qt.rgba(d.r, d.g, d.b, 0.6)
+    return Contrast.ensureContrastOn(Contrast.over(d, 0.6, barSurface), [barSurface], 3.0)
+  }
 
   // ── Theme palette ───────────────────────────────────────────────────────
   // The shell's Color only carries accent, foreground, background, urgent and
@@ -972,7 +1019,6 @@ Panel {
           // size, trimmed to sit level with them.
           iconSize: Style.space(11)
           color: root.barIconColor
-          opacity: vpn.connected ? 1.0 : 0.6
         }
       }
     }
@@ -1139,7 +1185,6 @@ Panel {
               meta: root.heroMeta
               foreground: root.foreground
               fontFamily: root.fontFamily
-              iconOpacity: vpn.connected ? 1.0 : 0.5
               iconComponent: Component {
                 ProtonIcon {
                   iconSize: Style.font.display
@@ -1178,6 +1223,7 @@ Panel {
             current: vpn.currentPlace
             connected: vpn.connected
             foreground: root.foreground
+            background: root.surface
             fontFamily: root.fontFamily
             onCityClicked: function(c) {
               root.drillInto({ code: c.code, name: vpn.countryName(c.code) })
@@ -1190,7 +1236,7 @@ Panel {
             width: parent.width
             text: vpn.actionStatus !== "" ? vpn.actionStatus : vpn.lastError
             textFormat: Text.PlainText
-            color: vpn.lastError !== "" && vpn.actionStatus === "" ? root.urgent : root.dim
+            color: vpn.lastError !== "" && vpn.actionStatus === "" ? root.danger : root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.bodySmall
             wrapMode: Text.WordWrap
@@ -1228,7 +1274,7 @@ Panel {
             visible: vpn.gtkAppInstalled
             width: parent.width
             text: "The Proton VPN desktop app is installed. It can't run alongside the CLI this widget uses. Quit the app before connecting, or remove it from the Omarchy menu under Remove → Package."
-            color: root.urgent
+            color: root.danger
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
             wrapMode: Text.WordWrap
@@ -1402,6 +1448,7 @@ Panel {
             sessionTx: vpn.sessionTx
             uptimeSec: vpn.uptimeSec
             foreground: root.foreground
+            background: root.surface
             fontFamily: root.fontFamily
           }
 
@@ -1717,7 +1764,7 @@ Panel {
                 visible: root.splitDetailVisible
                 width: parent.width
                 text: "Restart each chosen app after connecting, or it keeps using the tunnel it started on."
-                color: Qt.darker(root.foreground, 1.5)
+                color: root.dim
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
                 wrapMode: Text.WordWrap
@@ -1784,7 +1831,7 @@ Panel {
                   width: profileColumn.width
                   hasCursor: root.cursorActive && root.focusSection === "profiles" && root.profileIndex === index
                   icon: "\udb81\udf65"
-                  iconColor: root.themeColor(modelData.color)
+                  iconColor: root.markInk(root.themeColor(modelData.color))
                   title: modelData.name
                   subtitle: [modelData.title, modelData.subtitle].filter(function(v) { return v !== "" }).join(" · ")
                   trailing: vpn.connected && vpn.activeProfile === modelData.id ? "\udb80\udd2c" : ""
@@ -1943,7 +1990,7 @@ Panel {
                   Button {
                     visible: root.draft !== null && !root.draft.isNew
                     text: "Delete"
-                    foreground: root.urgent
+                    foreground: root.danger
                     hasCursor: root.cursorActive && root.editorButton === "delete"
                     onHovered: function(on) { if (on) root.hoverEditorButton(2) }
                     onClicked: root.deleteDraft()
@@ -2363,7 +2410,7 @@ Panel {
       width: swatch.selected ? Style.space(20) : Style.space(14)
       height: width
       radius: width / 2
-      color: root.themeColor(swatch.colorName)
+      color: root.markInk(root.themeColor(swatch.colorName))
       border.width: swatch.selected ? 2 : 0
       border.color: root.foreground
       Behavior on width { NumberAnimation { duration: 120 } }
@@ -2631,7 +2678,7 @@ Panel {
         color: {
           if (serverRow.isCurrent) return root.foreground
           var load = serverRow.server ? serverRow.server.load : 0
-          return load >= 85 ? root.urgent : root.dim
+          return load >= 85 ? root.danger : root.dim
         }
         font.family: root.fontFamily
         font.pixelSize: Style.font.bodySmall
@@ -2676,7 +2723,7 @@ Panel {
       }
       InfoValue {
         text: copyPair.copied ? "Copied" : copyPair.value + "  󰆏"
-        opacity: copyArea.containsMouse || copyPair.copied ? 1.0 : 0.85
+        color: copyArea.containsMouse || copyPair.copied ? root.foreground : root.copyInk
       }
     }
 
@@ -2705,8 +2752,7 @@ Panel {
   }
 
   component InfoLabel: Text {
-    color: root.foreground
-    opacity: 0.6
+    color: root.labelInk
     font.family: root.fontFamily
     font.pixelSize: Style.font.bodySmall
   }
