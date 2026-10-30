@@ -73,39 +73,49 @@ function over(top, alpha, bottom) {
   return hexOf(mixColor(b, t, Math.max(0, Math.min(1, alpha))))
 }
 
-// `foreground` lightened or darkened just enough to reach `minRatio` against
-// `background`. Returns a hex string, or the input unchanged when it already
-// passes or cannot be parsed.
-function ensureContrast(foreground, background, minRatio) {
-  var target = minRatio || 4.5
-  var fg = parseColor(foreground), bg = parseColor(background)
-  if (!fg || !bg) return String(foreground)
-  if (contrastRatio(hexOf(fg), hexOf(bg)) >= target) return hexOf(fg)
-
-  // Move away from the background: toward white on a dark one, black on a
-  // light one.
-  var limit = relativeLuminance(hexOf(bg)) < 0.5
-    ? { r: 255, g: 255, b: 255 }
-    : { r: 0, g: 0, b: 0 }
-  if (contrastRatio(hexOf(limit), hexOf(bg)) < target) return hexOf(limit)
-
-  var low = 0, high = 1
-  for (var step = 0; step < 24; step++) {
-    var mid = (low + high) / 2
-    if (contrastRatio(hexOf(mixColor(fg, limit, mid)), hexOf(bg)) >= target) high = mid
-    else low = mid
-  }
-  return hexOf(mixColor(fg, limit, high))
+// Whichever of white and black stands out more against `background`. Not
+// "luminance below 0.5": the crossover is about 0.18, and a mid-grey surface
+// picked by the 0.5 rule gets pushed toward the weaker end and never passes.
+function farthestFrom(background) {
+  var white = { r: 255, g: 255, b: 255 }, black = { r: 0, g: 0, b: 0 }
+  return contrastRatio(hexOf(white), background) >= contrastRatio(hexOf(black), background) ? white : black
 }
 
-// The same, against every surface the colour can land on (the panel, a
-// hovered row, a boxed section). The surfaces of one panel all sit on the
-// same side of mid-grey, so each pass only ever pushes further the same way;
-// the first surface decides the direction.
+// `foreground` lightened or darkened just enough to reach `minRatio` against
+// every one of `surfaces` (the panel, a hovered row, a boxed section). The
+// direction is fixed once, away from the first surface, and one bisection
+// checks them all, so a pass for one surface can never undo another.
+// Returns a hex string: the input when it already passes or can't be parsed,
+// the white or black limit when even that falls short.
 function ensureContrastOn(foreground, surfaces, minRatio) {
-  var out = String(foreground)
-  for (var pass = 0; pass < 2; pass++) {
-    for (var i = 0; i < surfaces.length; i++) out = ensureContrast(out, surfaces[i], minRatio)
+  var target = minRatio || 4.5
+  var fg = parseColor(foreground)
+  var list = []
+  for (var i = 0; i < surfaces.length; i++) {
+    var rgb = parseColor(surfaces[i])
+    if (rgb) list.push(hexOf(rgb))
   }
-  return out
+  if (!fg || list.length === 0) return String(foreground)
+  function worst(color) {
+    var hex = hexOf(color), low = Infinity
+    for (var j = 0; j < list.length; j++) low = Math.min(low, contrastRatio(hex, list[j]))
+    return low
+  }
+  if (worst(fg) >= target) return hexOf(fg)
+
+  var limit = farthestFrom(list[0])
+  if (worst(limit) < target) return hexOf(limit)
+
+  var lo = 0, hi = 1
+  for (var step = 0; step < 24; step++) {
+    var mid = (lo + hi) / 2
+    if (worst(mixColor(fg, limit, mid)) >= target) hi = mid
+    else lo = mid
+  }
+  return hexOf(mixColor(fg, limit, hi))
+}
+
+// The single-surface form.
+function ensureContrast(foreground, background, minRatio) {
+  return ensureContrastOn(foreground, [background], minRatio)
 }

@@ -132,12 +132,16 @@ Panel {
   readonly property color iconColor: vpn.connected
     ? foreground
     : Contrast.ensureContrastOn(Contrast.over(Qt.darker(foreground, 1.55), 0.5, surface), [surface], 3.0)
-  // The bar's own background, as with the panel. A transparent bar shows the
-  // wallpaper, which can't be measured; its colour channels are the theme's.
+  // On the bar's own background, as with the panel. A transparent bar shows
+  // the wallpaper, which can't be measured, and the shell has already picked
+  // barForeground to stand out from it: there the old dim-at-0.6 stays.
   readonly property string barSurface: String(bar ? bar.background : Color.bar.background)
-  readonly property color barIconColor: vpn.connected
-    ? barForeground
-    : Contrast.ensureContrastOn(Contrast.over(Qt.darker(barForeground, 1.55), 0.6, barSurface), [barSurface], 3.0)
+  readonly property color barIconColor: {
+    if (vpn.connected) return barForeground
+    var d = Qt.darker(barForeground, 1.55)
+    if (bar && bar.transparent) return Qt.rgba(d.r, d.g, d.b, 0.6)
+    return Contrast.ensureContrastOn(Contrast.over(d, 0.6, barSurface), [barSurface], 3.0)
+  }
 
   // ── Theme palette ───────────────────────────────────────────────────────
   // The shell's Color only carries accent, foreground, background, urgent and
@@ -1758,7 +1762,7 @@ Panel {
                 visible: root.splitDetailVisible
                 width: parent.width
                 text: "Restart each chosen app after connecting, or it keeps using the tunnel it started on."
-                color: Contrast.ensureContrastOn(Qt.darker(root.foreground, 1.5), [root.surface], 4.5)
+                color: root.textInk(Qt.darker(root.foreground, 1.5))
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
                 wrapMode: Text.WordWrap

@@ -38,7 +38,9 @@ line of a VPN widget), so this fork is where changes live.
   labels, fg at 0.6, were 2.8:1). So never add a new dimmed colour or opacity on text or an icon:
   route it through `Contrast.js` the way `Panel.qml`'s Contrast block does (composite with
   `Contrast.over` onto the surface under it, then `ensureContrastOn` to 4.5:1 for text, 3:1 for icons,
-  map dots and state marks). Decorative fills (land, chart area, baselines) stay as they are.
+  map dots and state marks). Decorative fills (land, chart area, baselines) and the opacity of a
+  disabled row (WCAG exempts inactive controls) stay as they are. A transparent bar is the one
+  surface that can't be measured (it shows the wallpaper): the bar icon keeps the shell's colour there.
 - **The surfaces**: the panel is `Color.popups.background`; a row under the cursor adds the hover
   fill, the nudge and the profile editor add the normal control fill (`textSurfaces`). The map's dots
   sit on land, the foreground at 0.10 over the panel. The bar icon sits on `bar.background`.
